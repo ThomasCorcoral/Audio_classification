@@ -1,0 +1,8 @@
+./working/
+./images_gen/
+./misc/diffres_data_speechcommands/datafiles/
+./datasets/*
+./src/__pycache__/
+./dev/.*
+./dev/working/
+
