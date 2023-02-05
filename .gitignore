@@ -5,4 +5,4 @@
 ./src/__pycache__/
 ./dev/.*
 ./dev/working/
-
+.ipynb_checkpoints/
