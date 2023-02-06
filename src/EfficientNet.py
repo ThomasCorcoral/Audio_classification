@@ -126,14 +126,23 @@ class EffNetAttention(nn.Module):
         self.learn_pos_emb = learn_pos_emb
         self.alpha = alpha
         # in_t_dim, in_f_dim, dimension_reduction_rate
-        self.neural_sampler = sampler(input_seq_length, n_mel_bins, 1-preserve_ratio, learn_pos_emb=self.learn_pos_emb)
-        #self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb, mean, std, n_mel_bins)
-        if pretrain == False:
-            print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')
-            self.effnet = EfficientNet.from_name('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
+        if sampler is None:
+            self.neural_sampler = None
+            if pretrain == False:
+                print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')
+                self.effnet = EfficientNet.from_name('efficientnet-b'+str(b))
+            else:
+                print('Now Use ImageNet Pretrained EfficientNet-B{:d} Model.'.format(b))
+                self.effnet = EfficientNet.from_pretrained('efficientnet-b'+str(b))
         else:
-            print('Now Use ImageNet Pretrained EfficientNet-B{:d} Model.'.format(b))
-            self.effnet = EfficientNet.from_pretrained('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
+            self.neural_sampler = sampler(input_seq_length, n_mel_bins, 1-preserve_ratio, learn_pos_emb=self.learn_pos_emb)
+            #self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb, mean, std, n_mel_bins)
+            if pretrain == False:
+                print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')
+                self.effnet = EfficientNet.from_name('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
+            else:
+                print('Now Use ImageNet Pretrained EfficientNet-B{:d} Model.'.format(b))
+                self.effnet = EfficientNet.from_pretrained('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
         # multi-head attention pooling
         if head_num > -1:
             print('Model with {:d} attention heads'.format(head_num))
@@ -163,18 +172,22 @@ class EffNetAttention(nn.Module):
         self.rank = None
 
     def forward(self, x, ):
-        # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
-        ret = self.neural_sampler(x)
-        x, score = ret['feature'], ret['score']
-        
-        # Be careful with this, a too small number car result in a memory leak !
-        if(self.batch_idx == 0 or (self.batch_idx % 1200 == 0 and self.training)):
-            self.neural_sampler.visualize(ret)
+    
+        if self.neural_sampler is not None:
+            # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
+            ret = self.neural_sampler(x)
+            x, score = ret['feature'], ret['score']
+            # Be careful with this, a too small number car result in a memory leak !
+            if(self.batch_idx == 0 or (self.batch_idx % 1200 == 0 and self.training)):
+                self.neural_sampler.visualize(ret)
+            
+            x = x.transpose(2, 3)
+            x = self.effnet.extract_features(x) # [10, 1280, 4, 4]
+            x = self.avgpool(x) # [10, 1280, 1, 4]
+            x = x.transpose(2,3)
+        else:
+            score = -1
 
-        x = x.transpose(2, 3)
-        x = self.effnet.extract_features(x) # [10, 1280, 4, 4]
-        x = self.avgpool(x) # [10, 1280, 1, 4]
-        x = x.transpose(2,3)
         out, _ = self.attention(x)
         if(self.training): 
             self.batch_idx += 1

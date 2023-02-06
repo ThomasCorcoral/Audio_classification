@@ -64,10 +64,3 @@ def generate_lists(PATH_DATASET, PATH_OUTPUT, PATH_DATA):
             with open(PATH_OUTPUT + 'datafiles/speechcommand_valid_data.json', 'w') as f:
                 json.dump({'data': wav_list}, f, indent=1)
         print(split + ' data processing finished, total {:d} samples'.format(len(wav_list)))
-
-
-if __name__ == "__main__":
-    PATH_DATASET = "./datasets/speechcommands"
-    PATH_DATA = "./misc/diffres_data_speechcommands"
-    PATH_OUTPUT = "./working/"
-    generate_lists(PATH_DATASET, PATH_OUTPUT)
