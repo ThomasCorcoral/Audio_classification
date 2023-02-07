@@ -37,14 +37,14 @@ def prepare_parameters(algo):
 
     params["label_csv"] = PATH_DATA + "/speechcommands_class_labels_indices.csv"
     params["hop_ms"] = 10 # how much each window moves forward relative to the previous one
-    params["batch_size"] = 128 # Size of each batch
+    params["batch_size"] = 32 # Size of each batch
     params["num_workers"] = 2 # Max recommended is 2
 
     params["n_class"] = 35 # 35 classes in speechcommands
     params["eff_b"] = 2 # To select efficientnet network
     params["pretrained"] = True # Use pretrained model or not
     params["att_head"] = 4 # Number of attentions heads
-    params["preserve_ratio"] = 0.15 # will preserve x% of original audio
+    params["preserve_ratio"] = 0.4 # will preserve x% of original audio
     params["alpha"] = 1.0
     params["learn_pos_emb"] = False
 
@@ -83,17 +83,23 @@ def prepare_data(data, label_csv, audio_conf, hop_ms, batch_size, num_workers, t
                                             drop_last=True)
     return loader
 
-def get_model(n_class, eff_b, pretrained, att_head, target_length, algo, preserve_ratio, alpha, learn_pos_emb, num_mel_bins, device):
+def get_model(n_class, eff_b, pretrained, att_head, target_length, algo, preserve_ratio, alpha, learn_pos_emb, num_mel_bins, device, ratio_visualize):
+    if algo is None:
+        a = None
+    else:
+        a = eval(algo)
     model = EffNetAttention(label_dim=n_class, 
                             b=eff_b, 
                             pretrain=pretrained, 
                             head_num=att_head, 
                             input_seq_length=target_length,
-                            sampler=eval(algo), 
+                            sampler=a, 
                             preserve_ratio=preserve_ratio, 
                             alpha=alpha, 
                             learn_pos_emb=learn_pos_emb,
-                            n_mel_bins=num_mel_bins).to(device)
+                            n_mel_bins=num_mel_bins,
+                            ratio_visualize=ratio_visualize,
+                            device=device).to(device)
     return model
 
 def run(algo, mfcc):
@@ -102,6 +108,8 @@ def run(algo, mfcc):
 
     params = prepare_parameters(algo)
 
+    ratio_save = 128/params["batch_size"]
+
     train_loader = prepare_data(data_train, params["label_csv"], params["audio_conf"], params["hop_ms"], params["batch_size"], params["num_workers"], mfcc=mfcc)
     val_loader = prepare_data(data_eval, params["label_csv"], params["audio_conf"], params["hop_ms"], params["batch_size"], params["num_workers"], train=False, mfcc=mfcc)
 
@@ -109,7 +117,7 @@ def run(algo, mfcc):
     torch.set_grad_enabled(True)
     print(device)
 
-    audio_model = get_model(params["n_class"], params["eff_b"], params["pretrained"], params["att_head"], params["target_length"], params["algo"], params["preserve_ratio"], params["alpha"], params["learn_pos_emb"], params["num_mel_bins"], device)
+    audio_model = get_model(params["n_class"], params["eff_b"], params["pretrained"], params["att_head"], params["target_length"], params["algo"], params["preserve_ratio"], params["alpha"], params["learn_pos_emb"], params["num_mel_bins"], device, ratio_save)
 
     epoch = params["epoch"]
     global_step = params["global_step"]
@@ -163,7 +171,7 @@ def run(algo, mfcc):
             del audio_input, audio_output, score_pred
 
             # Eval the model every 100 batches
-            if global_step % 100 == 0:
+            if global_step % (ratio_save*100) == 0:
                 loss_test = []
                 audio_model.eval() # Now evaluate the model
                 true_pred, false_pred = 0, 0
@@ -187,9 +195,9 @@ def run(algo, mfcc):
                 accuracy_test = true_pred / (true_pred + false_pred)
                 
                 # Writing to tensorboard
-                writer.add_scalar('Loss/train', loss.item(), global_step/100)
-                writer.add_scalar('Loss/test', np.mean(loss_test), global_step/100)
-                writer.add_scalar('Accuracy/test', accuracy_test, global_step/100)
+                writer.add_scalar('Loss/train', loss.item(), global_step/(ratio_save*100))
+                writer.add_scalar('Loss/test', np.mean(loss_test), global_step/(ratio_save*100))
+                writer.add_scalar('Accuracy/test', accuracy_test, global_step/(ratio_save*100))
 
                 del loss_test, accuracy_test
                 gc.collect()
@@ -201,9 +209,10 @@ def run(algo, mfcc):
         scheduler.step()
         epoch += 1
         torch.save(audio_model.state_dict(), "./working/save_model/model.pt")
-        torch.save({"state_dict": audio_model.state_dict(), "epoch": epoch, "global_step": global_step}, "%saudio_model.pth" % (exp_dir))
-        torch.save({"state_dict": optimizer.state_dict(), "epoch": epoch, "global_step": global_step}, "%soptim_state.pth" % (exp_dir))
+        torch.save({"state_dict": audio_model.state_dict(), "epoch": epoch, "global_step": global_step}, "%saudio_model.pth" % (params["exp_dir"]))
+        torch.save({"state_dict": optimizer.state_dict(), "epoch": epoch, "global_step": global_step}, "%soptim_state.pth" % (params["exp_dir"]))
     return 0
 
 if __name__ == "__main__":
+    #run(None, False)
     run("DiffRes", False)

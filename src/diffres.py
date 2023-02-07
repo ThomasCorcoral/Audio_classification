@@ -1,7 +1,4 @@
-import torch
-import torch.nn as nn
-import torch
-import os
+import torch, os
 import matplotlib.pyplot as plt
 
 from src.core import Base
@@ -9,11 +6,7 @@ from src.conv import DilatedConv, DilatedConv_Out_128
 
 from src.pooling import Pooling_layer
 
-import gc
-
 EPS = 1e-12
-RESCALE_INTERVEL_MIN = 1e-4
-RESCALE_INTERVEL_MAX = 1 - 1e-4
 
 class DiffRes(Base):
     def __init__(

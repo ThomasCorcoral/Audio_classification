@@ -12,10 +12,6 @@ import numpy as np
 
 import gc
 
-#sys.path.append('../misc/efficientnet-pytorch/EfficientNet-PyTorch/EfficientNet-PyTorch-master')
-#from efficientnet_pytorch import EfficientNet
-
-
 def init_layer(layer):
     if layer.weight.ndimension() == 4:
         (n_out, n_in, height, width) = layer.weight.size()
@@ -75,7 +71,7 @@ class MHeadAttention(nn.Module):
 
         self.att = nn.ModuleList([])
         self.cla = nn.ModuleList([])
-        for i in range(self.head_num):
+        for _ in range(self.head_num):
             self.att.append(nn.Conv2d(in_channels=n_in, out_channels=n_out, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), bias=True))
             self.cla.append(nn.Conv2d(in_channels=n_in, out_channels=n_out, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), bias=True))
 
@@ -118,7 +114,7 @@ class MHeadAttention(nn.Module):
 
 class EffNetAttention(nn.Module):
 
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, n_mel_bins=128):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, n_mel_bins=128, ratio_visualize=1.0, device="cpu"):
         super(EffNetAttention, self).__init__()
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
@@ -136,7 +132,6 @@ class EffNetAttention(nn.Module):
                 self.effnet = EfficientNet.from_pretrained('efficientnet-b'+str(b))
         else:
             self.neural_sampler = sampler(input_seq_length, n_mel_bins, 1-preserve_ratio, learn_pos_emb=self.learn_pos_emb)
-            #self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb, mean, std, n_mel_bins)
             if pretrain == False:
                 print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')
                 self.effnet = EfficientNet.from_name('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
@@ -169,24 +164,30 @@ class EffNetAttention(nn.Module):
             
         self.effnet._fc = nn.Identity()
         self.batch_idx=0
-        self.rank = None
+        self.visualize_range = 1200 * ratio_visualize
+        self.device = device
 
-    def forward(self, x, ):
+    def forward(self, x):
     
         if self.neural_sampler is not None:
             # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
             ret = self.neural_sampler(x)
             x, score = ret['feature'], ret['score']
             # Be careful with this, a too small number car result in a memory leak !
-            if(self.batch_idx == 0 or (self.batch_idx % 1200 == 0 and self.training)):
+            if(self.batch_idx == 0 or (self.batch_idx % self.visualize_range == 0 and self.training)):
                 self.neural_sampler.visualize(ret)
-            
             x = x.transpose(2, 3)
-            x = self.effnet.extract_features(x) # [10, 1280, 4, 4]
-            x = self.avgpool(x) # [10, 1280, 1, 4]
+            x = self.effnet.extract_features(x)
+            x = self.avgpool(x)
             x = x.transpose(2,3)
         else:
             score = -1
+            x = x.unsqueeze(1)
+            x = np.tile(x.cpu().numpy(), (1, 3, 1, 1))
+            x = torch.from_numpy(x).to(self.device)
+            x = self.effnet.extract_features(x)
+            x = self.avgpool(x)
+            x = x.transpose(2,3)
 
         out, _ = self.attention(x)
         if(self.training): 
