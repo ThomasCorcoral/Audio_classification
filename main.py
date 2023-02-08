@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter # Used to see training evolut
 from src.load_data import AudiosetDataset
 from src.generate_data import generate_lists
 from src.EfficientNet import EffNetAttention
-from src.diffres import DiffRes, AvgPool, ConvAvgPool, AvgMaxPool, ChangeHopSize
+from src.diffres import DiffRes
 
 PATH_DATASET = "./datasets/speechcommands"
 PATH_DATA = "./misc/diffres_data_speechcommands"
@@ -37,18 +37,18 @@ def prepare_parameters(algo):
 
     params["label_csv"] = PATH_DATA + "/speechcommands_class_labels_indices.csv"
     params["hop_ms"] = 10 # how much each window moves forward relative to the previous one
-    params["batch_size"] = 32 # Size of each batch
+    params["batch_size"] = 128 # Size of each batch
     params["num_workers"] = 2 # Max recommended is 2
 
     params["n_class"] = 35 # 35 classes in speechcommands
     params["eff_b"] = 2 # To select efficientnet network
     params["pretrained"] = True # Use pretrained model or not
     params["att_head"] = 4 # Number of attentions heads
-    params["preserve_ratio"] = 0.4 # will preserve x% of original audio
+    params["preserve_ratio"] = 0.1 # will preserve x% of original audio
     params["alpha"] = 1.0
     params["learn_pos_emb"] = False
 
-    # params["algo"] = "DiffRes" # Drop-in algorithm : DiffRes, AvgPool, ConvAvgPool, AvgMaxPool, ChangeHopSize
+    # params["algo"] = "DiffRes" # Drop-in algorithm : DiffRes / None
     params["algo"] = algo
 
     params["epoch"] = 0 # Current epoch

@@ -174,8 +174,8 @@ class EffNetAttention(nn.Module):
             ret = self.neural_sampler(x)
             x, score = ret['feature'], ret['score']
             # Be careful with this, a too small number car result in a memory leak !
-            if(self.batch_idx == 0 or (self.batch_idx % self.visualize_range == 0 and self.training)):
-                self.neural_sampler.visualize(ret)
+            #if(self.batch_idx == 0 or (self.batch_idx % self.visualize_range == 0 and self.training)):
+            #    self.neural_sampler.visualize(ret)
             x = x.transpose(2, 3)
             x = self.effnet.extract_features(x)
             x = self.avgpool(x)

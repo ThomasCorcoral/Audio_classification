@@ -2,7 +2,7 @@ import torch, os
 import matplotlib.pyplot as plt
 
 from src.core import Base
-from src.conv import DilatedConv, DilatedConv_Out_128
+from src.conv import DilatedConv
 
 from src.pooling import Pooling_layer
 
@@ -71,7 +71,8 @@ class DiffRes(Base):
     def visualize(self, ret, savepath="./images_gen/"):
         x, y, emb, score = ret["x"], ret["feature"], ret["resolution_enc"], ret["score"]
         y = y[:, 0, :, :]
-        for i in range(10): # Visualize 10 images
+        nb_img_to_visualize = 10
+        for i in range(nb_img_to_visualize):
             if(i >= x.size(0)):
                 break
             plt.figure(figsize=(8, 16))
@@ -86,7 +87,7 @@ class DiffRes(Base):
             )
             plt.subplot(413)
             plt.title(
-                "DiffRes mel-spectrogram (Using avgpool frame aggregation function)"
+                "DiffRes mel spectrogram"
             )
             plt.imshow(
                 y[i, ...].detach().cpu().numpy().T, aspect="auto", interpolation="none"
@@ -104,126 +105,7 @@ class DiffRes(Base):
             plt.savefig(os.path.join(path, "%s.png" % i))
             plt.close()
         self.current += 1
-        #del x, y, emb, score
-        #gc.collect()
 
-class ConvAvgPool(Base):
-    def __init__(
-        self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False
-    ):
-        super().__init__(in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb)
-        self.feature_channels=1
-        self.model = DilatedConv_Out_128(in_channels=self.input_f_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
-
-    def forward(self, x):
-        ret = {}
-        
-        # Normalize the socre value
-        feature = self.model(x.permute(0,2,1)).permute(0,2,1) + x
-        ret['feature'] = self.pooling(feature.permute(0,2,1)).permute(0,2,1).unsqueeze(1)
-        
-        
-        ret["x"] = x
-        ret["score"] = None
-        ret["resolution_enc"] = None
-        ret["avgpool"] = None
-        ret["maxpool"] = None
-        ret["feature"] = self.pooling(feature.permute(0,2,1)).permute(0,2,1).unsqueeze(1)
-        ret["guide_loss"], ret["activeness"] = self.zero_loss_like(x), self.zero_loss_like(x)
-        return ret
-
-    def visualize(self, ret, savepath="."):
-        x, y = ret['x'], ret['feature']
-        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
-        for i in range(10):
-            if(i >= x.size(0)): 
-                break
-            plt.figure(figsize=(6, 8))
-            plt.subplot(211)
-            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
-            plt.subplot(212)
-            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
-            # path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
-            plt.savefig(os.path.join(savepath, "%s.png" % i))
-            plt.close()
-
-class AvgPool(Base):
-    def __init__(
-        self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False
-    ):
-        super().__init__(in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb)
-        self.feature_channels = 1
-
-    def forward(self, x):
-        ret = {}
-        ret["x"] = x
-        ret["score"] = None
-        ret["resolution_enc"] = None
-        ret["avgpool"] = self.pooling(x.permute(0, 2, 1)).permute(0, 2, 1).unsqueeze(1)
-        ret["maxpool"] = None
-        ret["feature"] = ret["avgpool"]
-        ret["guide_loss"], ret["activeness"] = self.zero_loss_like(x), self.zero_loss_like(x)
-        return ret
-
-    def visualize(self, ret, savepath="."):
-        x, y = ret["x"], ret["feature"]
-        for i in range(10): # Visualize 10 images
-            if(i >= x.size(0)):
-                break
-            plt.figure(figsize=(6, 8))
-            plt.subplot(211)
-            plt.title("Original spectrogram")
-            plt.imshow(
-                x[i, ...].detach().cpu().numpy().T, aspect="auto", interpolation="none"
-            )
-            plt.subplot(212)
-            plt.title("After average pooling")
-            plt.imshow(
-                y[i, ...].detach().cpu().numpy().T, aspect="auto", interpolation="none"
-            )
-            # path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
-            plt.savefig(os.path.join(savepath, "%s.png" % i))
-            plt.close()
-
-class AvgMaxPool(Base):
-    def __init__(
-        self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False
-    ):
-        super().__init__(in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb)
-        self.feature_channels = 1
-
-    def forward(self, x):
-        ret = {}
-        ret["x"] = x
-        ret["score"] = None
-        ret["resolution_enc"] = None
-        ret["avgpool"] = self.pooling(x.permute(0, 2, 1)).permute(0, 2, 1).unsqueeze(1)
-        ret["maxpool"] = self.max_pooling(x.permute(0, 2, 1)).permute(0, 2, 1).unsqueeze(1)
-        ret["feature"] = ret["avgpool"] + ret["maxpool"]
-        ret["guide_loss"], ret["activeness"] = self.zero_loss_like(x), self.zero_loss_like(x)
-        return ret
-
-    def visualize(self, ret, savepath="."):
-        x, y = ret["x"], ret["feature"]
-        for i in range(10): # Visualize 10 images
-            if(i >= x.size(0)):
-                break
-            plt.figure(figsize=(6, 8))
-            plt.subplot(211)
-            plt.title("Original spectrogram")
-            plt.imshow(
-                x[i, ...].detach().cpu().numpy().T, aspect="auto", interpolation="none"
-            )
-            plt.subplot(212)
-            plt.title("After avg-max pooling")
-            plt.imshow(
-                y[i, ...].detach().cpu().numpy().T, aspect="auto", interpolation="none"
-            )
-            # path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
-            plt.savefig(os.path.join(savepath, "%s.png" % i))
-            plt.close()
-
-class ChangeHopSize(Base):
     def __init__(
         self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False
     ):

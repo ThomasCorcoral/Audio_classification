@@ -39,17 +39,3 @@ class DilatedConv(Module):
         for blk in self.blks:
             x = blk(x)
         return x
-
-class DilatedConv_Out_128(Module):
-    def __init__(self, in_channels, dilation_rate, input_size, kernel_size, stride):
-        super().__init__()
-        self.blks = torch.nn.ModuleList()
-        rate = 1.0
-        self.blks.append(DilatedConvBLock1D(in_channels, int(in_channels * rate), input_size=input_size, kernel_size=kernel_size, stride=stride, dilation=1))
-        self.blks.append(DilatedConvBLock1D(int(in_channels * rate), int(in_channels * rate), input_size=input_size, kernel_size=kernel_size, stride=stride, dilation=dilation_rate))
-        self.blks.append(DilatedConvBLock1D(int(in_channels * rate), in_channels, input_size=input_size, kernel_size=kernel_size, stride=stride, dilation=dilation_rate))
-
-    def forward(self, x: Tensor) -> Tensor:
-        for blk in self.blks:
-            x = blk(x)
-        return x
