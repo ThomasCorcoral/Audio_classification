@@ -3,6 +3,8 @@ from tqdm import tqdm
 from efficientnet_pytorch import EfficientNet
 import torch.nn as nn
 import numpy as np
+import argparse
+import time
 
 from torch.utils.tensorboard import SummaryWriter # Used to see training evolution
 
@@ -24,11 +26,9 @@ def prepare_start():
 
     return data_train, data_val
 
-def prepare_parameters(algo):
+def prepare_parameters(algo, args = {}):
 
     params = {}
-
-    params["exp_dir"] = "./working/save_model/"
 
     params["num_mel_bins"] = 128
     params["target_length"] = 98
@@ -37,14 +37,14 @@ def prepare_parameters(algo):
 
     params["label_csv"] = PATH_DATA + "/speechcommands_class_labels_indices.csv"
     params["hop_ms"] = 10 # how much each window moves forward relative to the previous one
-    params["batch_size"] = 128 # Size of each batch
+    params["batch_size"] = args.batch_size if args.batch_size else 256 # Size of each batch
     params["num_workers"] = 2 # Max recommended is 2
 
     params["n_class"] = 35 # 35 classes in speechcommands
     params["eff_b"] = 2 # To select efficientnet network
     params["pretrained"] = True # Use pretrained model or not
     params["att_head"] = 4 # Number of attentions heads
-    params["preserve_ratio"] = 0.1 # will preserve x% of original audio
+    params["preserve_ratio"] = args.ratio if args.ratio else 0.5 # will preserve x% of original audio
     params["alpha"] = 1.0
     params["learn_pos_emb"] = False
 
@@ -58,6 +58,13 @@ def prepare_parameters(algo):
     params["lr"] = 2.5e-3 # learning rate
     params["lrscheduler_start"] = 3 # When to start decreasing the lr
     params["lrscheduler_decay"] = 0.7 # coefficient of reduction
+    
+    params["time_id"] = str(time.time())
+    params["exp_dir"] = PATH_OUTPUT + "save_model_" + str(params["preserve_ratio"]) + "_" + params["time_id"] + "/"
+    
+    
+    #print(params)
+    #exit(0)
 
     return params
 
@@ -102,11 +109,11 @@ def get_model(n_class, eff_b, pretrained, att_head, target_length, algo, preserv
                             device=device).to(device)
     return model
 
-def run(algo, mfcc):
+def run(algo, mfcc, args = {}):
 
     data_train, data_eval = prepare_start()
 
-    params = prepare_parameters(algo)
+    params = prepare_parameters(algo, args)
 
     ratio_save = 128/params["batch_size"]
 
@@ -121,6 +128,9 @@ def run(algo, mfcc):
 
     epoch = params["epoch"]
     global_step = params["global_step"]
+    
+    if not os.path.exists(os.path.dirname(params["exp_dir"])):
+        os.mkdir(params["exp_dir"])
 
     if(os.path.exists(os.path.join(params["exp_dir"], "audio_model.pth"))):
         model_checkpoint = torch.load(os.path.join(params["exp_dir"], "audio_model.pth"), map_location="cpu")
@@ -143,7 +153,7 @@ def run(algo, mfcc):
 
     loss_fn = nn.CrossEntropyLoss()
 
-    writer = SummaryWriter()
+    writer = SummaryWriter("runs/run_" + str(params["preserve_ratio"]) + "_" + params["time_id"] + "/")
     audio_model.train()
 
     while epoch < params["n_epochs"] + 1:
@@ -208,11 +218,16 @@ def run(algo, mfcc):
 
         scheduler.step()
         epoch += 1
-        torch.save(audio_model.state_dict(), "./working/save_model/model.pt")
+        torch.save(audio_model.state_dict(), params["exp_dir"] + "model.pt")
         torch.save({"state_dict": audio_model.state_dict(), "epoch": epoch, "global_step": global_step}, "%saudio_model.pth" % (params["exp_dir"]))
         torch.save({"state_dict": optimizer.state_dict(), "epoch": epoch, "global_step": global_step}, "%soptim_state.pth" % (params["exp_dir"]))
     return 0
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ratio", help="Specified preserve ratio", type=float)
+    parser.add_argument("--batch-size", help="Specified batch size", type=int)
+    args = parser.parse_args()
+    
     #run(None, False)
-    run("DiffRes", False)
+    run("DiffRes", False, args)
