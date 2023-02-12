@@ -36,4 +36,11 @@ To train the model, simply run the main.py file as
 python3 main.py
 ```
 
-If you want to modify parameters, juste edit the main.py file.
+If you want to specify the preserve ratio and the batch size directly in the shell, you can use the following arguments
+
+```shell
+python3 main.py --ratio 0.5 --batch-size 128
+```
+
+
+If you want to modify other parameters, juste edit the main.py file.
