@@ -36,18 +36,4 @@ To train the model, simply run the main.py file as
 python3 main.py
 ```
 
-Make sure the good environment is activate
-
-If you want to specify the preserve ratio and the batch size directly in the shell, you can use the following arguments
-
-```shell
-python3 main.py --ratio 0.5 --batch-size 128
-```
-
-### 1.3 Testing
-
-TODO : Prepare pre-trained models
-
-TODO : Create testing script
-
-TODO : Add possibility to predict an extern file
+If you want to modify parameters, juste edit the main.py file.
