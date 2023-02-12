@@ -9,9 +9,8 @@ from src.pooling import Pooling_layer
 EPS = 1e-12
 
 class DiffRes(Base):
-    def __init__(
-        self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False
-    ):
+
+    def __init__(self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False):
         super().__init__(in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb)
         self.feature_channels = 3
         self.current = 0
@@ -105,36 +104,3 @@ class DiffRes(Base):
             plt.savefig(os.path.join(path, "%s.png" % i))
             plt.close()
         self.current += 1
-
-    def __init__(
-        self, in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb=False
-    ):
-        super().__init__(in_t_dim, in_f_dim, dimension_reduction_rate, learn_pos_emb)
-        self.feature_channels=1
-        self.pooling = Pooling_layer(pooling_type="uniform", factor=1-dimension_reduction_rate)
-        
-    def forward(self, x):
-        ret={}
-        
-        ret["x"] = x
-        ret["score"] = None
-        ret["resolution_enc"] = None
-        ret["avgpool"] = None
-        ret["maxpool"] = None
-        ret["feature"] = self.pooling(x.unsqueeze(1))
-        ret["guide_loss"], ret["activeness"] = self.zero_loss_like(x), self.zero_loss_like(x)
-        return ret
-
-    def visualize(self, ret, savepath="."):
-        x, y = ret['x'], ret['feature']
-        for i in range(10):
-            if(i >= x.size(0)): break
-            plt.figure(figsize=(6, 8))
-            plt.subplot(211)
-            plt.title("Original spectrogram")
-            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
-            plt.subplot(212)
-            plt.title("Change hop size")
-            plt.imshow(y[i,0,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
-            plt.savefig(os.path.join(savepath, "%s.png" % i))
-            plt.close()
