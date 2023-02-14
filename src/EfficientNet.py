@@ -1,73 +1,13 @@
-import sys
-from turtle import forward
-from unicodedata import bidirectional
+import sys, torch, torchvision, gc
 import torch.nn as nn
-import torch
-
-import torch.nn.functional as F
-
 from efficientnet_pytorch import EfficientNet
-import torchvision
 import numpy as np
 
-import gc
-
-def init_layer(layer):
-    if layer.weight.ndimension() == 4:
-        (n_out, n_in, height, width) = layer.weight.size()
-        n = n_in * height * width
-    elif layer.weight.ndimension() == 2:
-        (n_out, n) = layer.weight.size()
-
-    std = math.sqrt(2. / n)
-    scale = std * math.sqrt(3.)
-    layer.weight.data.uniform_(-scale, scale)
-
-    if layer.bias is not None:
-        layer.bias.data.fill_(0.)
-
-def init_bn(bn):
-    bn.weight.data.fill_(1.)
-
-class MeanPooling(nn.Module):
-    def __init__(self, n_in, n_out, att_activation, cla_activation):
-        super(MeanPooling, self).__init__()
-
-        self.cla_activation = cla_activation
-
-        self.cla = nn.Conv2d(
-            in_channels=n_in, out_channels=n_out, kernel_size=(
-                1, 1), stride=(
-                1, 1), padding=(
-                0, 0), bias=True)
-
-        self.init_weights()
-
-    def init_weights(self):
-        init_layer(self.cla)
-
-    def activate(self, x, activation):
-        return torch.sigmoid(x)
-
-    def forward(self, x):
-        """input: (samples_num, freq_bins, time_steps, 1)
-        """
-        cla = self.cla(x)
-        cla = self.activate(cla, self.cla_activation)
-
-        # cla = cla[:, :, :, 0]   # (samples_num, classes_num, time_steps)
-        x = torch.mean(cla, dim=(2,3))
-
-        return x, []
-
 class MHeadAttention(nn.Module):
-    def __init__(self, n_in, n_out, att_activation, cla_activation, head_num=4):
+    def __init__(self, n_in, n_out, head_num=4):
         super(MHeadAttention, self).__init__()
 
         self.head_num = head_num
-
-        self.att_activation = att_activation
-        self.cla_activation = cla_activation
 
         self.att = nn.ModuleList([])
         self.cla = nn.ModuleList([])
@@ -77,15 +17,8 @@ class MHeadAttention(nn.Module):
 
         self.head_weight = nn.Parameter(torch.tensor([1.0/self.head_num] * self.head_num))
 
-    def activate(self, x, activation):
-        if activation == 'linear':
-            return x
-        elif activation == 'relu':
-            return F.relu(x)
-        elif activation == 'sigmoid':
-            return torch.sigmoid(x)
-        elif activation == 'softmax':
-            return F.softmax(x, dim=1)
+    def activate(self, x):
+        return torch.sigmoid(x)
 
     def forward(self, x):
         """input: (samples_num, freq_bins, time_steps, 1)
@@ -94,10 +27,10 @@ class MHeadAttention(nn.Module):
         x_out = []
         for i in range(self.head_num):
             att = self.att[i](x)
-            att = self.activate(att, self.att_activation)
+            att = self.activate(att)
 
             cla = self.cla[i](x)
-            cla = self.activate(cla, self.cla_activation)
+            cla = self.activate(cla)
 
             att = att[:, :, :, 0]  # (samples_num, classes_num, time_steps)
             cla = cla[:, :, :, 0]  # (samples_num, classes_num, time_steps)
@@ -121,7 +54,7 @@ class EffNetAttention(nn.Module):
         print("Use %s with preserve ratio of %s" % (str(sampler), str(preserve_ratio)))
         self.learn_pos_emb = learn_pos_emb
         self.alpha = alpha
-        # in_t_dim, in_f_dim, dimension_reduction_rate
+        
         if sampler is None:
             self.neural_sampler = None
             if pretrain == False:
@@ -139,23 +72,13 @@ class EffNetAttention(nn.Module):
                 print('Now Use ImageNet Pretrained EfficientNet-B{:d} Model.'.format(b))
                 self.effnet = EfficientNet.from_pretrained('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
         # multi-head attention pooling
-        if head_num > -1:
+        if head_num > 0:
             print('Model with {:d} attention heads'.format(head_num))
             self.attention = MHeadAttention(
                 self.middim[b],
-                label_dim,
-                att_activation='sigmoid',
-                cla_activation='sigmoid')
-        # mean pooling (no attention)
-        elif head_num == 0:
-            print('Model with mean pooling')
-            self.attention = MeanPooling(
-                self.middim[b],
-                label_dim,
-                att_activation='sigmoid',
-                cla_activation='sigmoid')
+                label_dim)
         else:
-            raise ValueError('Attention head must be integer >= 0.')
+            raise ValueError('Attention head must be integer > 0.')
         
         if(n_mel_bins < 128):
             self.avgpool = nn.AdaptiveAvgPool2d((4, 1))
